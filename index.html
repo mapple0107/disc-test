@@ -229,9 +229,6 @@
   .bipolar-point-wrap {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
   }
-  .bipolar-point-tag {
-    font-size: 11px; color: var(--text-muted);
-  }
   .bipolar-divider {
     align-self: stretch;
     width: 1px;
@@ -1462,8 +1459,7 @@
             ${points.map((p, i) => `
               ${i === 2 ? '<div class="bipolar-divider"></div>' : ""}
               <div class="bipolar-point-wrap">
-                <div class="bipolar-point ${savedAnswer === p.value ? 'selected' : ''}" data-value="${p.value}">${p.value}</div>
-                <div class="bipolar-point-tag">${p.tag}</div>
+                <div class="bipolar-point ${savedAnswer === p.value ? 'selected' : ''}" data-value="${p.value}">${p.tag}</div>
               </div>
             `).join("")}
           </div>
