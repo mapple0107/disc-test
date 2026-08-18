@@ -1857,20 +1857,60 @@
     `;
   }
 
+  // Measures, in canvas-pixel coordinates, the top edge of every row/title
+  // inside `groupEl` — these are the only Y offsets it's ever safe to cut
+  // a page at. Must be called while groupEl is still normally laid out in
+  // the live DOM (so getBoundingClientRect() reflects real positions),
+  // before its canvas capture. `canvasWidth` is the resulting canvas's
+  // pixel width, used to derive the actual DOM→canvas scale factor rather
+  // than assuming it matches the html2canvas `scale` option exactly.
+  function getRowBreakOffsets(groupEl, canvasWidth) {
+    const rect = groupEl.getBoundingClientRect();
+    if (!rect.width) return [0];
+    const scale = canvasWidth / rect.width;
+    const boundaryEls = groupEl.querySelectorAll(
+      ".answer-log-row, .answer-log-subgroup-title, .answer-log-group-title"
+    );
+    const offsets = [0];
+    boundaryEls.forEach(el => {
+      const r = el.getBoundingClientRect();
+      offsets.push(Math.round((r.top - rect.top) * scale));
+    });
+    return Array.from(new Set(offsets)).sort((a, b) => a - b);
+  }
+
   // Slices a tall canvas into page-height chunks and appends each chunk to
   // `pdf` as its own new page. Used so every answer-log section (DISC /
   // 適性測驗表一 / 適性測驗表二) always starts at the top of a fresh PDF
   // page instead of being awkwardly split mid-row by html2pdf's automatic
   // (and, for tall multi-section content, unreliable) page-break detection.
-  function addCanvasAsPages(pdf, canvas, marginMm, pageWidthMm, pageHeightMm) {
+  //
+  // `safeBreaks` (from getRowBreakOffsets) are the only Y offsets allowed
+  // as a cut point — without this, a section taller than one page would
+  // get cut at a fixed pixel height with no regard for row boundaries,
+  // slicing straight through a row's text whenever the section didn't
+  // happen to fit on exactly one page.
+  function addCanvasAsPages(pdf, canvas, marginMm, pageWidthMm, pageHeightMm, safeBreaks) {
     const contentWidthMm = pageWidthMm - marginMm * 2;
     const contentHeightMm = pageHeightMm - marginMm * 2;
     const pxPerMm = canvas.width / contentWidthMm;
-    const sliceHeightPx = Math.max(1, Math.floor(contentHeightMm * pxPerMm));
+    const idealSliceHeightPx = Math.max(1, Math.floor(contentHeightMm * pxPerMm));
+
+    const breaks = Array.from(new Set([...(safeBreaks && safeBreaks.length ? safeBreaks : [0]), canvas.height]))
+      .sort((a, b) => a - b);
 
     let sy = 0;
     while (sy < canvas.height) {
-      const sh = Math.min(sliceHeightPx, canvas.height - sy);
+      const idealEnd = Math.min(canvas.height, sy + idealSliceHeightPx);
+      // 從安全切點裡找出 <= idealEnd 且 > sy 的最大值；找不到就代表這一列
+      // 本身比一整頁還高（極端狀況），只好還是用理想切點，不強求整列完整。
+      let cut = idealEnd;
+      for (let i = breaks.length - 1; i >= 0; i--) {
+        if (breaks[i] > sy && breaks[i] <= idealEnd) { cut = breaks[i]; break; }
+      }
+      const sh = cut - sy;
+      if (sh <= 0) break; // 安全防呆，避免無窮迴圈
+
       const sliceCanvas = document.createElement("canvas");
       sliceCanvas.width = canvas.width;
       sliceCanvas.height = sh;
@@ -1879,7 +1919,7 @@
       const dataUrl = sliceCanvas.toDataURL("image/jpeg", 0.95);
       pdf.addPage();
       pdf.addImage(dataUrl, "JPEG", marginMm, marginMm, contentWidthMm, sh / pxPerMm);
-      sy += sh;
+      sy = cut;
     }
   }
 
@@ -1952,8 +1992,11 @@
             },
           },
         };
+        // groupEl 這時仍在正常版面中（尚未被 html2canvas 複製/離開文件），
+        // 先量測每一列的位置，才能在切頁時避開列的中間。
         const canvas = await html2pdf().set(canvasOpt).from(groupEl).toCanvas().get("canvas");
-        addCanvasAsPages(pdf, canvas, MARGIN_MM, PAGE_W_MM, PAGE_H_MM);
+        const safeBreaks = getRowBreakOffsets(groupEl, canvas.width);
+        addCanvasAsPages(pdf, canvas, MARGIN_MM, PAGE_W_MM, PAGE_H_MM, safeBreaks);
       }
 
       return pdf;
