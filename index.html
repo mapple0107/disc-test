@@ -920,6 +920,7 @@
     "牡羊座", "金牛座", "雙子座", "巨蟹座", "獅子座", "處女座",
     "天秤座", "天蠍座", "射手座", "摩羯座", "水瓶座", "雙魚座",
   ];
+  const GENDER_OPTIONS = ["男", "女"];
 
   function createEmptyProfile() {
     return {
@@ -1313,10 +1314,20 @@
       </div>
     `;
 
+    const genderFieldHtml = `
+      <div class="profile-field">
+        <label>性別</label>
+        <select onchange="updateProfileField('gender', this.value)">
+          <option value="" ${p.gender === "" ? "selected" : ""}>請選擇</option>
+          ${GENDER_OPTIONS.map(g => `<option value="${g}" ${p.gender === g ? "selected" : ""}>${g}</option>`).join("")}
+        </select>
+      </div>
+    `;
+
     const basicInfoHtml = `
       <div class="profile-field-grid">
         ${textField("姓名", "name", p.name)}
-        ${textField("性別", "gender", p.gender)}
+        ${genderFieldHtml}
         ${textField("生日", "birthday", p.birthday, { type: "date" })}
         ${zodiacFieldHtml}
         ${textField("手機", "mobile", p.mobile, { type: "tel" })}
@@ -1369,7 +1380,7 @@
     `).join("");
     const skillsHtml = `
       <table class="skill-table">
-        <thead><tr><th>評估自己的技能和才幹</th>${SKILL_RATINGS.map(r => `<th>${r}</th>`).join("")}</tr></thead>
+        <thead><tr><th></th>${SKILL_RATINGS.map(r => `<th>${r}</th>`).join("")}</tr></thead>
         <tbody>${skillRowsHtml}</tbody>
       </table>
     `;
@@ -1392,7 +1403,7 @@
       </div>
 
       <div class="profile-section">
-        <h3 class="profile-section-title">技能、才幹及其他經驗</h3>
+        <h3 class="profile-section-title">評估自己的技能和才幹</h3>
         <div class="card" style="overflow-x:auto;">${skillsHtml}</div>
       </div>
 
