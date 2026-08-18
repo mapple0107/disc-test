@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>Webhook 連線測試</title>
+<style>
+  body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; max-width: 560px; margin: 60px auto; padding: 0 20px; color: #1a1a1a; }
+  h1 { font-size: 20px; }
+  p { line-height: 1.7; color: #444; }
+  code { background: #f3f3f3; padding: 2px 6px; border-radius: 4px; font-size: 13px; word-break: break-all; }
+  button {
+    margin-top: 20px; padding: 12px 24px; font-size: 15px; border: none;
+    border-radius: 8px; background: #2f6feb; color: #fff; cursor: pointer;
+  }
+  button:disabled { background: #99b6ee; cursor: default; }
+  #status { margin-top: 20px; padding: 14px 16px; border-radius: 8px; font-size: 14px; display: none; }
+  #status.show { display: block; }
+  #status.ok { background: #e6f4ea; color: #1e7e34; }
+  #status.err { background: #fdecea; color: #b3261e; }
+</style>
+</head>
+<body>
+  <h1>測驗結果 Webhook 連線測試</h1>
+  <p>
+    這個頁面會送一筆「測試用」的假資料到你設定好的 Google Apps Script 網址，
+    用來確認 Google 試算表跟雲端硬碟資料夾有沒有正確收到資料，不需要跑完整個測驗。
+  </p>
+  <p>
+    目前設定的網址：<br /><code id="urlDisplay"></code>
+  </p>
+  <button id="sendBtn">送出一筆測試資料</button>
+  <div id="status"></div>
+
+  <script>
+    const RESULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxUwdXjb7T1LNzB8_Rlm6Nl05-zlTlZKK9WLo3Zy7vHwFtqYr8ioYM4XUDXMpnLIbo/exec";
+
+    document.getElementById("urlDisplay").textContent = RESULT_WEBHOOK_URL;
+
+    const btn = document.getElementById("sendBtn");
+    const statusEl = document.getElementById("status");
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "送出中…";
+      statusEl.className = "";
+      statusEl.classList.remove("show");
+
+      const payload = {
+        "提交時間": new Date().toISOString(),
+        "姓名": "測試用-請忽略",
+        "性別": "女",
+        "星座": "獅子座",
+        "生日": "",
+        "行動電話": "0900000000",
+        "工作經歷": "這是一筆測試資料，可以直接刪除",
+        "技能自評": "跟人溝通的能力:出色",
+        "個人行為模式分析（DISC）_型態": "DI",
+        "個人行為模式分析（DISC）_D 支配型": 10,
+        "個人行為模式分析（DISC）_I 影響型": 7,
+        "個人行為模式分析（DISC）_S 穩健型": 3,
+        "個人行為模式分析（DISC）_C 謹慎型": 0,
+        "適性測驗表（一）_總分": 61,
+        "適性測驗表（二）_橫座標": 20,
+        "適性測驗表（二）_縱座標": 20,
+        "適性測驗表（二）_象限型態": "彈性型（介於各象限之間，風格較有彈性）",
+      };
+
+      try {
+        await fetch(RESULT_WEBHOOK_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+        });
+        // no-cors 模式讀不到伺服器實際回應內容或狀態碼，這是瀏覽器的安全限制。
+        // 只要沒有跳出網路錯誤，就代表資料已經送出去了，實際有沒有寫入成功
+        // 要直接去 Google 試算表 / 雲端硬碟確認。
+        statusEl.textContent = "已送出！請直接去你的 Google 試算表跟雲端硬碟「職業適性分析-PDF結果」資料夾確認有沒有出現這筆「測試用-請忽略」的資料（可能要等幾秒鐘）。確認沒問題後可以把這筆測試資料刪掉。";
+        statusEl.classList.add("show", "ok");
+      } catch (err) {
+        statusEl.textContent = "送出失敗：" + err.message + "（請確認網路連線正常，或這個網址是否正確）";
+        statusEl.classList.add("show", "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "再送一次";
+      }
+    });
+  </script>
+</body>
+</html>
