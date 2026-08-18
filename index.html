@@ -941,11 +941,13 @@
     answers: {}, // { "testId:questionId": categoryId (choice) | number (likert) }
     current: 0,
     profile: createEmptyProfile(),
+    resultSubmitted: false, // 避免同一次測驗結果被重複送出到後台試算表
   };
 
   function resetQuiz() {
     state.answers = {};
     state.current = 0;
+    state.resultSubmitted = false;
   }
 
   function answerKey(testId, qId) { return testId + ":" + qId; }
@@ -1082,6 +1084,100 @@
         percents[c.id] = Math.round(((scores[c.id] - min) / (max - min)) * 100);
       });
       return { scores, percents, top: test.categories, maxByCategory, unit: "scale2d" };
+    }
+  }
+
+  // ---------------- 後台資料回收（Google 試算表 + PDF）----------------
+  // 把這個網址換成你自己部署的 Google Apps Script 網頁應用程式網址
+  // （.../macros/s/xxxxx/exec），測試者完成測驗後就會自動：
+  //   1) 新增一列個人資料＋分數摘要到你的 Google 試算表
+  //   2) 產生一份完整結果 PDF，存到你的 Google 雲端硬碟，並把下載連結
+  //      加進同一列，方便你直接從試算表下載每個人的 PDF。
+  // 留空字串則完全不會送出、也不影響其他功能（測試者仍可自行下載 PDF）。
+  const RESULT_WEBHOOK_URL = "";
+
+  // 把個人資料 + 每個測驗段落的計分結果，攤平成一個「一列」的物件，
+  // key 會直接變成試算表的欄位名稱，方便你之後直接用試算表打開來看。
+  function buildResultSummaryPayload() {
+    const p = state.profile;
+    const workHistoryText = p.workHistory
+      .filter(w => w.position || w.years || w.reason)
+      .map(w => {
+        const yearsText = w.years ? `${w.years}年` : "";
+        const reasonText = w.reason ? `，${w.reason}` : "";
+        return `${w.position || "（未填職稱）"}(${yearsText}${reasonText})`;
+      })
+      .join(" / ");
+    const skillsText = PROFILE_SKILLS
+      .filter(s => p.skills[s.id])
+      .map(s => `${s.label}:${p.skills[s.id]}`)
+      .join("、");
+
+    const payload = {
+      "提交時間": new Date().toISOString(),
+      "姓名": p.name || "",
+      "性別": p.gender || "",
+      "星座": p.zodiac || "",
+      "生日": p.birthday || "",
+      "行動電話": p.mobile || "",
+      "工作經歷": workHistoryText,
+      "技能自評": skillsText,
+    };
+
+    TESTS.forEach(test => {
+      const result = computeTestResult(test);
+      if (result.unit === "choice") {
+        payload[`${test.title}_型態`] = result.typeCode;
+        test.categories.forEach(c => { payload[`${test.title}_${c.name}`] = result.scores[c.id]; });
+      } else if (result.unit === "scale") {
+        payload[`${test.title}_總分`] = result.scores.total;
+      } else if (result.unit === "scale2d") {
+        payload[`${test.title}_橫座標`] = result.scores.x;
+        payload[`${test.title}_縱座標`] = result.scores.y;
+        if (test.quadrant) {
+          payload[`${test.title}_象限型態`] = resolveQuadrantType(test.quadrant, result.scores.x, result.scores.y);
+        }
+      } else if (result.unit === "likert") {
+        payload[`${test.title}_最高分`] = result.top.map(c => c.name).join("、");
+      }
+    });
+
+    return payload;
+  }
+
+  // 測驗全部完成、結果頁顯示時呼叫一次：組出個人資料+分數的摘要列，
+  // 並自動產生一份完整結果 PDF（跟「下載結果 PDF」按鈕輸出的檔案完全
+  // 一樣），一起送到 RESULT_WEBHOOK_URL。Apps Script 那邊會把 PDF 存進
+  // 你的 Google 雲端硬碟、把下載連結加進試算表這一列，讓你可以直接從
+  // 試算表點連結下載每個人的 PDF 結果檔案。
+  // 用 no-cors 模式送出（Apps Script 網頁應用程式不會回傳 CORS 標頭，
+  // 讀不到回應內容沒關係，反正我們也不需要讀取，純粹送出去存檔）。
+  async function submitResultToBackend() {
+    if (!RESULT_WEBHOOK_URL || state.resultSubmitted) return;
+    if (!TESTS.every(isTestComplete)) return; // 尚未完成測驗，不用送
+    state.resultSubmitted = true;
+
+    try {
+      const payload = buildResultSummaryPayload();
+
+      const pdf = await buildResultPdfDocument();
+      if (pdf) {
+        const dataUri = pdf.output("datauristring");
+        const base64 = dataUri.slice(dataUri.indexOf(",") + 1);
+        const safeName = (state.profile.name || "未命名").replace(/[\\/:*?"<>|]/g, "_");
+        payload.__pdfBase64 = base64;
+        payload.__pdfFileName = `職業適性分析結果_${safeName}.pdf`;
+      }
+
+      await fetch(RESULT_WEBHOOK_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.error("送出測驗結果到後台失敗", err);
+      state.resultSubmitted = false; // 失敗的話，下次進結果頁還能再試一次
     }
   }
 
@@ -1256,6 +1352,10 @@
     } else if (hash.startsWith("#/result")) {
       renderNav("");
       app.innerHTML = renderResult();
+      // #pdfExportRoot only exists in the live DOM after the line above, so
+      // the backend upload (which needs to render that DOM into a PDF) has
+      // to be kicked off here rather than from inside renderResult() itself.
+      submitResultToBackend();
     } else {
       renderNav("home");
       app.innerHTML = renderHome();
@@ -1783,9 +1883,12 @@
     }
   }
 
-  // Exports #pdfExportRoot (score summary + quadrant chart + full answer
-  // log) as a downloadable PDF. Uses the html2pdf.js bundle embedded above
-  // (html2canvas + jsPDF) so the whole site stays a single offline file.
+  // Builds the full multi-page jsPDF document (score summary + quadrant
+  // chart + full answer log, each answer-log section starting on its own
+  // page) and returns the jsPDF instance WITHOUT saving/downloading it.
+  // Shared by the manual "下載結果 PDF" button and the automatic background
+  // upload to the backend (submitResultToBackend), so both always produce
+  // an identical PDF.
   //
   // The intro portion (header / profile summary / score & chart blocks) is
   // rendered with html2pdf's own automatic pagination, which handles that
@@ -1793,16 +1896,9 @@
   // canvas and manually appended as fresh page(s) via addCanvasAsPages, so
   // sections never start awkwardly mid-page or get split with duplicated /
   // clipped rows.
-  async function downloadResultPdf() {
-    const btn = document.getElementById("downloadPdfBtn");
+  async function buildResultPdfDocument() {
     const root = document.getElementById("pdfExportRoot");
-    if (!root || typeof html2pdf === "undefined") return;
-
-    const toast = document.createElement("div");
-    toast.className = "pdf-export-toast";
-    toast.textContent = "正在產生 PDF，請稍候…";
-    document.body.appendChild(toast);
-    if (btn) { btn.disabled = true; btn.textContent = "產生中…"; }
+    if (!root || typeof html2pdf === "undefined") return null;
 
     const MARGIN_MM = 8;
     const PAGE_W_MM = 210;
@@ -1860,15 +1956,33 @@
         addCanvasAsPages(pdf, canvas, MARGIN_MM, PAGE_W_MM, PAGE_H_MM);
       }
 
-      pdf.save("職業適性分析結果.pdf");
+      return pdf;
     } catch (err) {
-      console.error(err);
-      alert("PDF 產生失敗，請再試一次。");
       // Make sure the on-screen page isn't left missing the answer log if
       // something threw before the normal restore point above ran.
       if (groupsContainer && groupsParent && !groupsContainer.isConnected) {
         groupsParent.insertBefore(groupsContainer, groupsNextSibling);
       }
+      throw err;
+    }
+  }
+
+  // "下載結果 PDF" 按鈕：產生 PDF 並直接觸發瀏覽器下載給測試者自己留存。
+  async function downloadResultPdf() {
+    const btn = document.getElementById("downloadPdfBtn");
+
+    const toast = document.createElement("div");
+    toast.className = "pdf-export-toast";
+    toast.textContent = "正在產生 PDF，請稍候…";
+    document.body.appendChild(toast);
+    if (btn) { btn.disabled = true; btn.textContent = "產生中…"; }
+
+    try {
+      const pdf = await buildResultPdfDocument();
+      if (pdf) pdf.save("職業適性分析結果.pdf");
+    } catch (err) {
+      console.error(err);
+      alert("PDF 產生失敗，請再試一次。");
     } finally {
       toast.remove();
       if (btn) { btn.disabled = false; btn.textContent = "下載結果 PDF"; }
