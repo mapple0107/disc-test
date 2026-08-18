@@ -616,6 +616,9 @@
       title: "個人行為模式分析（DISC）",
       intro: "職場與人際溝通的行為評估模型",
       scorer: "choice",
+      // 除了最高分類別外，只要還有其他類別分數 >= 這個門檻，就一併列為
+      // 「次高分」，測驗結果會合併成兩種類型（例如 D:10、I:7 → DI型）。
+      secondaryThreshold: 5,
       categories: [
         { id: "D", name: "D 支配型", series: "--series-1" },
         { id: "I", name: "I 影響型", series: "--series-2" },
@@ -994,7 +997,25 @@
       test.categories.forEach(c => { percents[c.id] = total ? Math.round((scores[c.id] / total) * 100) : 0; });
       const maxScore = Math.max(...test.categories.map(c => scores[c.id]));
       const top = test.categories.filter(c => scores[c.id] === maxScore);
-      return { scores, percents, top, maxPossible: total, unit: "choice" };
+
+      // typeCategories：最終判定的類型組合。
+      // - 最高分只有一個類別，且有其他類別分數 >= secondaryThreshold 時，
+      //   取分數最高的那個類別當「次高分」，兩者合併成雙類型（如 DI型）。
+      // - 其餘情況（含最高分平手）維持單一／平手時原本的 top 陣列。
+      let typeCategories = top;
+      let secondary = null;
+      if (test.secondaryThreshold != null && top.length === 1) {
+        const rest = test.categories
+          .filter(c => c.id !== top[0].id && scores[c.id] >= test.secondaryThreshold)
+          .sort((a, b) => scores[b.id] - scores[a.id]);
+        if (rest.length) {
+          secondary = rest[0];
+          typeCategories = [top[0], secondary];
+        }
+      }
+      const typeCode = typeCategories.map(c => c.id).join("");
+
+      return { scores, percents, top, secondary, typeCategories, typeCode, maxPossible: total, unit: "choice" };
     }
 
     if (test.scorer === "likert") {
@@ -1664,7 +1685,9 @@
         ? `總分：${result.scores.total} / ${result.maxPossible}`
         : result.unit === "scale2d"
           ? `橫座標：${result.scores.x} ／ 縱座標：${result.scores.y}`
-          : `最高分：${result.top.map(c => c.name).join("、")}`;
+          : result.secondary
+            ? `測驗結果：${result.typeCategories.map(c => c.name).join(" + ")}（${result.typeCode}型）`
+            : `最高分：${result.top.map(c => c.name).join("、")}`;
 
       let bandHtml = "";
       if (test.bands && result.unit === "scale") {
