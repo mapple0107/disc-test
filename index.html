@@ -402,7 +402,7 @@
   .profile-summary-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
   .profile-summary-table { display: flex; flex-direction: column; gap: 0; font-size: 13px; }
   .profile-summary-row {
-    display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 10px;
+    display: grid; grid-template-columns: 1.2fr 1fr 1fr 1.4fr; gap: 10px;
     padding: 8px 0; border-bottom: 1px dashed var(--gridline);
   }
   .profile-summary-table--2col .profile-summary-row { grid-template-columns: 1fr 1fr; }
@@ -928,9 +928,9 @@
     return {
       name: "", gender: "", birthday: "", zodiac: "", mobile: "",
       workHistory: [
-        { position: "", years: "", reason: "" },
-        { position: "", years: "", reason: "" },
-        { position: "", years: "", reason: "" },
+        { company: "", position: "", years: "", reason: "" },
+        { company: "", position: "", years: "", reason: "" },
+        { company: "", position: "", years: "", reason: "" },
       ],
       skills: {},
     };
@@ -972,7 +972,7 @@
 
   function addProfileRow(section) {
     const templates = {
-      workHistory: { position: "", years: "", reason: "" },
+      workHistory: { company: "", position: "", years: "", reason: "" },
     };
     state.profile[section].push({ ...templates[section] });
     document.getElementById("app").innerHTML = renderProfile();
@@ -1101,11 +1101,13 @@
   function buildResultSummaryPayload() {
     const p = state.profile;
     const workHistoryText = p.workHistory
-      .filter(w => w.position || w.years || w.reason)
+      .filter(w => w.company || w.position || w.years || w.reason)
       .map(w => {
+        const companyText = w.company || "（未填公司）";
+        const positionText = w.position || "（未填職稱）";
         const yearsText = w.years ? `${w.years}年` : "";
         const reasonText = w.reason ? `，${w.reason}` : "";
-        return `${w.position || "（未填職稱）"}(${yearsText}${reasonText})`;
+        return `${companyText}－${positionText}(${yearsText}${reasonText})`;
       })
       .join(" / ");
     const skillsText = PROFILE_SKILLS
@@ -1230,15 +1232,16 @@
         }</div>`
       : `<p class="profile-section-sub" style="margin:0;">未填寫個人資料。</p>`;
 
-    const workRows = p.workHistory.filter(r => r.position || r.years || r.reason);
+    const workRows = p.workHistory.filter(r => r.company || r.position || r.years || r.reason);
     const workHtml = workRows.length
       ? `
         <div class="profile-summary-table">
           <div class="profile-summary-row profile-summary-row-head">
-            <div>職位</div><div>年資</div><div>離職原因</div>
+            <div>公司名稱</div><div>職位</div><div>年資</div><div>離職原因</div>
           </div>
           ${workRows.map(r => `
             <div class="profile-summary-row">
+              <div>${escapeHtml(r.company) || "—"}</div>
               <div>${escapeHtml(r.position) || "—"}</div>
               <div>${escapeHtml(r.years) || "—"}</div>
               <div>${escapeHtml(r.reason) || "—"}</div>
@@ -1475,8 +1478,10 @@
     };
 
     const workHistoryHtml = rowTable(
-      "workHistory", ["職位", "年資", "離職原因"], "28px 1fr 1fr 1.4fr 28px",
+      "workHistory", ["公司名稱", "職位", "年資", "離職原因"], "28px 1.2fr 1fr 1fr 1.4fr 28px",
       (row, i) => `
+        <input type="text" value="${(row.company || "").replace(/"/g, "&quot;")}" placeholder="公司名稱"
+          oninput="updateProfileField('workHistory.${i}.company', this.value)" />
         <input type="text" value="${(row.position || "").replace(/"/g, "&quot;")}" placeholder="職位"
           oninput="updateProfileField('workHistory.${i}.position', this.value)" />
         <input type="text" value="${(row.years || "").replace(/"/g, "&quot;")}" placeholder="年資"
