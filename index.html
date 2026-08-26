@@ -1480,15 +1480,15 @@
       <div class="profile-field">
         <label>生日（民國年／月／日）</label>
         <div class="birthday-input-group">
-          <input type="number" inputmode="numeric" min="1" max="200" placeholder="民國年"
+          <input type="number" inputmode="numeric" min="1" max="200"
             value="${(p.birthday.year || "").toString().replace(/"/g, "&quot;")}"
             oninput="updateProfileField('birthday.year', this.value)" />
           <span class="birthday-sep">年</span>
-          <input type="number" inputmode="numeric" min="1" max="12" placeholder="月"
+          <input type="number" inputmode="numeric" min="1" max="12"
             value="${(p.birthday.month || "").toString().replace(/"/g, "&quot;")}"
             oninput="updateProfileField('birthday.month', this.value)" />
           <span class="birthday-sep">月</span>
-          <input type="number" inputmode="numeric" min="1" max="31" placeholder="日"
+          <input type="number" inputmode="numeric" min="1" max="31"
             value="${(p.birthday.day || "").toString().replace(/"/g, "&quot;")}"
             oninput="updateProfileField('birthday.day', this.value)" />
           <span class="birthday-sep">日</span>
