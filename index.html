@@ -254,7 +254,13 @@
     letter-spacing: 0.08em; margin-bottom: 10px;
   }
   .profile-header h1 { font-size: 24px; margin: 0 0 10px; }
-  .profile-header p { color: var(--text-secondary); font-size: 14px; max-width: 560px; margin: 0 auto; }
+  .profile-header p {
+    color: var(--text-secondary); font-size: 16px; max-width: none;
+    margin: 0 auto; white-space: nowrap;
+  }
+  @media (max-width: 720px) {
+    .profile-header p { white-space: normal; font-size: 14px; max-width: 560px; }
+  }
 
   .profile-section { margin-bottom: 28px; }
   .profile-section-title {
@@ -281,6 +287,7 @@
   .profile-field input[type="text"],
   .profile-field input[type="date"],
   .profile-field input[type="tel"],
+  .profile-field input[type="number"],
   .profile-field select,
   .profile-field textarea {
     font: inherit; font-size: 14px;
@@ -295,6 +302,18 @@
   .profile-field input:focus, .profile-field select:focus, .profile-field textarea:focus {
     outline: none; border-color: var(--accent);
   }
+
+  .birthday-input-group { display: flex; align-items: center; gap: 6px; }
+  .birthday-input-group input[type="number"] {
+    width: 0; flex: 1; min-width: 0; text-align: center;
+    -moz-appearance: textfield;
+  }
+  .birthday-input-group input[type="number"]::-webkit-outer-spin-button,
+  .birthday-input-group input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  .birthday-input-group input[type="number"]:first-child { flex: 1.3; }
+  .birthday-sep { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
 
   .profile-row-table { display: flex; flex-direction: column; gap: 10px; }
   .profile-row-head, .profile-row {
@@ -926,7 +945,7 @@
 
   function createEmptyProfile() {
     return {
-      name: "", gender: "", birthday: "", zodiac: "", mobile: "",
+      name: "", gender: "", birthday: { year: "", month: "", day: "" }, zodiac: "", mobile: "",
       workHistory: [
         { company: "", position: "", years: "", reason: "" },
         { company: "", position: "", years: "", reason: "" },
@@ -955,6 +974,16 @@
   function escapeHtml(str) {
     return (str || "").toString()
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // 把生日的民國年／月／日三個欄位組合成顯示用文字，例如「民國113年8月26日」。
+  // 允許只填了部分欄位（例如只填年），沒填年就當作完全沒填生日。
+  function formatBirthdayROC(b) {
+    if (!b || !b.year) return "";
+    let text = `民國${b.year}年`;
+    if (b.month) text += `${b.month}月`;
+    if (b.day) text += `${b.day}日`;
+    return text;
   }
 
   // ---------------- profile helpers ----------------
@@ -1120,7 +1149,7 @@
       "姓名": p.name || "",
       "性別": p.gender || "",
       "星座": p.zodiac || "",
-      "生日": p.birthday || "",
+      "生日": formatBirthdayROC(p.birthday),
       "行動電話": p.mobile || "",
       "工作經歷": workHistoryText,
       "技能自評": skillsText,
@@ -1216,7 +1245,7 @@
     const basicFields = [
       { label: "姓名", value: p.name },
       { label: "性別", value: p.gender },
-      { label: "生日", value: p.birthday },
+      { label: "生日", value: formatBirthdayROC(p.birthday) },
       { label: "星座", value: p.zodiac },
       { label: "手機", value: p.mobile },
     ];
@@ -1447,11 +1476,31 @@
       </div>
     `;
 
+    const birthdayFieldHtml = `
+      <div class="profile-field">
+        <label>生日（民國年／月／日）</label>
+        <div class="birthday-input-group">
+          <input type="number" inputmode="numeric" min="1" max="200" placeholder="民國年"
+            value="${(p.birthday.year || "").toString().replace(/"/g, "&quot;")}"
+            oninput="updateProfileField('birthday.year', this.value)" />
+          <span class="birthday-sep">年</span>
+          <input type="number" inputmode="numeric" min="1" max="12" placeholder="月"
+            value="${(p.birthday.month || "").toString().replace(/"/g, "&quot;")}"
+            oninput="updateProfileField('birthday.month', this.value)" />
+          <span class="birthday-sep">月</span>
+          <input type="number" inputmode="numeric" min="1" max="31" placeholder="日"
+            value="${(p.birthday.day || "").toString().replace(/"/g, "&quot;")}"
+            oninput="updateProfileField('birthday.day', this.value)" />
+          <span class="birthday-sep">日</span>
+        </div>
+      </div>
+    `;
+
     const basicInfoHtml = `
       <div class="profile-field-grid">
         ${textField("姓名", "name", p.name)}
         ${genderFieldHtml}
-        ${textField("生日", "birthday", p.birthday, { type: "date" })}
+        ${birthdayFieldHtml}
         ${zodiacFieldHtml}
         ${textField("手機", "mobile", p.mobile, { type: "tel" })}
       </div>
