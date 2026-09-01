@@ -1331,7 +1331,7 @@
   // (and, for scale2d tests, by cat sub-group) — used both on-screen and
   // inside the exported PDF.
   function renderAnswerLogHtml() {
-    return TESTS.map(test => {
+    return TESTS.map((test, testIdx) => {
       let rowsHtml = "";
       if (test.scorer === "scale2d") {
         rowsHtml = test.categories.map(cat => {
@@ -1362,8 +1362,21 @@
         }).join("");
       }
 
+      // 「產出結果分析」這個總標題／說明文字，只在第一個測驗段落的卡片
+      // 裡面加在最前面，讓它跟第一個表格的內容綁在同一張卡片、同一個
+      // canvas 裡一起被擷取——這樣匯出 PDF 時，這個標題一定會跟它下面
+      // 的表格出現在同一頁，不會自己被留在前一頁的最下面、表格卻被推到
+      // 下一頁開頭（也就是常見的「標題孤兒」排版問題）。
+      const overviewHeaderHtml = testIdx === 0
+        ? `
+          <h3 class="block-title">產出結果分析</h3>
+          <p class="block-sub">以下列出本次測驗所有題目與你的作答內容，可一併下載為 PDF 檔案。</p>
+        `
+        : "";
+
       return `
         <div class="card answer-log-group">
+          ${overviewHeaderHtml}
           <h4 class="answer-log-group-title">${test.title}</h4>
           ${rowsHtml}
         </div>
@@ -1906,8 +1919,6 @@
         ${blocks}
 
         <div class="result-block answer-log-block">
-          <h3 class="block-title">產出結果分析</h3>
-          <p class="block-sub">以下列出本次測驗所有題目與你的作答內容，可一併下載為 PDF 檔案。</p>
           <div class="answer-log-actions no-print">
             <button class="btn btn-primary" id="downloadPdfBtn" onclick="downloadResultPdf()">下載結果 PDF</button>
           </div>
