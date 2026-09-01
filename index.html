@@ -1125,6 +1125,18 @@
   // 留空字串則完全不會送出、也不影響其他功能（測試者仍可自行下載 PDF）。
   const RESULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxUwdXjb7T1LNzB8_Rlm6Nl05-zlTlZKK9WLo3Zy7vHwFtqYr8ioYM4XUDXMpnLIbo/exec";
 
+  // 只有部署在「原本這個網站」的網域＋路徑時，才會真的把資料送到上面那個
+  // 試算表。這樣就算有人把整份程式碼 Fork 走、卻忘記把 RESULT_WEBHOOK_URL
+  // 換成自己的網址，資料也不會誤送到這裡——因為 Fork 出去的網站網址
+  // （例如 https://別人的帳號.github.io/...）跟下面設定的網域對不起來，
+  // 送出動作會直接被擋掉。
+  const ALLOWED_RESULT_HOST = "mapple0107.github.io";
+  const ALLOWED_RESULT_PATH_PREFIX = "/disc-test";
+  function isAllowedResultOrigin() {
+    return location.hostname === ALLOWED_RESULT_HOST &&
+      location.pathname.startsWith(ALLOWED_RESULT_PATH_PREFIX);
+  }
+
   // 把個人資料 + 每個測驗段落的計分結果，攤平成一個「一列」的物件，
   // key 會直接變成試算表的欄位名稱，方便你之後直接用試算表打開來看。
   function buildResultSummaryPayload() {
@@ -1186,6 +1198,7 @@
   async function submitResultToBackend() {
     if (!RESULT_WEBHOOK_URL || state.resultSubmitted) return;
     if (!TESTS.every(isTestComplete)) return; // 尚未完成測驗，不用送
+    if (!isAllowedResultOrigin()) return; // 不是原本的網站網址（例如被 Fork 出去的複本），不送
     state.resultSubmitted = true;
 
     try {
